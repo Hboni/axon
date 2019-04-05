@@ -6909,6 +6909,7 @@ _ipsubprocs = []
 
 
 def runIPConsoleKernel(mode='qtconsole'):
+    print('runIPConsoleKernel')
     import IPython
     from IPython.lib import guisupport
     qtapp = QApplication.instance()
@@ -6943,9 +6944,43 @@ def runIPConsoleKernel(mode='qtconsole'):
         control.show()
         return None
 
+    elif ipversion >= [4, 0]:
+        print('ipython >= 4.0')
+        import ipykernel.kernelapp
+        app = ipykernel.kernelapp.IPKernelApp.instance()
+        print('app:', app, app.initialized(), file=open('/tmp/log', 'a'))
+        if not app.initialized() or not app.kernel:
+            print('runing IP console kernel')
+            app.hb_port = 50042  # don't know why this is not set automatically
+            app.initialize([mode, '--pylab=qt',
+                            "--KernelApp.parent_appname='ipython-%s'" % mode])
+            # in ipython >= 1.2, app.start() blocks until a ctrl-c is issued in
+            # the terminal. Seems to block in tornado.ioloop.PollIOLoop.start()
+            #
+            # So, don't call app.start because it would begin a zmq/tornado loop
+            # instead we must just initialize its callback.
+            # if app.poller is not None:
+                            # app.poller.start()
+            app.kernel.start()
+
+            from zmq.eventloop import ioloop
+            # IP 2 allows just calling the current callbacks.
+            # For IP 1 it is not sufficient.
+            def my_start_ioloop_callbacks(self):
+                with self._callback_lock:
+                    callbacks = self._callbacks
+                    self._callbacks = []
+                for callback in callbacks:
+                    self._run_callback(callback)
+
+            my_start_ioloop_callbacks(ioloop.IOLoop.instance())
+        return app
+
     elif ipversion >= [1, 0]:
+        print('ipython >= 1.0')
         from IPython.kernel.zmq.kernelapp import IPKernelApp
         app = IPKernelApp.instance()
+        print('app:', app)
         if not app.initialized() or not app.kernel:
             print('runing IP console kernel')
             app.hb_port = 50042  # don't know why this is not set automatically

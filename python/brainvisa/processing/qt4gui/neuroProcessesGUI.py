@@ -173,23 +173,51 @@ def startShell():
         os.environ["QT_API"] = "pyqt5"
     elif qt_impl == 'PySide':
         os.environ["QT_API"] = "pyside"
+
+    try:
+        # try using jupyter qtconsole
+        import jupyter_core
+        ipConsole = brainvisa.processes.runIPConsoleKernel()
+        print('ipConsole:', ipConsole, file=sys.stderr)
+        sys.stderr.flush()
+        import soma.subprocess
+        python = 'python%d' % sys.version_info[0]
+        sp = soma.subprocess.Popen([
+            sys.executable, '-c',
+            'import os; os.environ["QT_API"] = "%s"; '
+            'from jupyter_core.command import main; main()'
+            % os.environ["QT_API"],
+            'qtconsole', '--kernel', python, '--existing',
+            '--shell=%d' % ipConsole.shell_port,
+            '--iopub=%d' % ipConsole.iopub_port,
+            '--stdin=%d' % ipConsole.stdin_port,
+            '--hb=%d' % ipConsole.hb_port])
+        brainvisa.processes._ipsubprocs.append(_ProcDeleter(sp))
+
+        return
+    except:
+        pass
+
     try:
         import IPython
         ipversion = [int(x) for x in IPython.__version__.split('.')]
         if ipversion >= [0, 11]:
-        # ipython >= 0.11, use client/server mode
+            # ipython >= 0.11, use client/server mode
             ipConsole = brainvisa.processes.runIPConsoleKernel()
             import soma.subprocess
             if ipversion >= [1, 0]:
                 ipmodule = 'IPython.terminal.ipapp'
             else:
                 ipmodule = 'IPython.frontend.terminal.ipapp'
-            sp = soma.subprocess.Popen([sys.executable, '-c',
-                                   'import os; os.environ["QT_API"] = "pyqt"; from %s import launch_new_instance; launch_new_instance()' % ipmodule,
-                                   'qtconsole', '--existing',
-                                   '--shell=%d' % ipConsole.shell_port,
-                                   '--iopub=%d' % ipConsole.iopub_port,
-                                   '--stdin=%d' % ipConsole.stdin_port, '--hb=%d' % ipConsole.hb_port])
+            sp = soma.subprocess.Popen([
+                sys.executable, '-c',
+                'import os; os.environ["QT_API"] = "%s"; from %s import launch_new_instance; launch_new_instance()'
+                % (os.environ["QT_API"], ipmodule),
+                'qtconsole', '--existing',
+                '--shell=%d' % ipConsole.shell_port,
+                '--iopub=%d' % ipConsole.iopub_port,
+                '--stdin=%d' % ipConsole.stdin_port,
+                '--hb=%d' % ipConsole.hb_port])
             brainvisa.processes._ipsubprocs.append(_ProcDeleter(sp))
             return
     except:
